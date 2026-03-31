@@ -49,4 +49,158 @@ def process_image_assets(file_bytes):
 
 
 def get_auto_rotation(img_w, img_h, frame_w, frame_h):
-    if frame_w < frame
+    if frame_w < frame_h and img_w > img_h:
+        return 90
+    elif frame_w > frame_h and img_w < img_h:
+        return 90
+    return 0
+
+
+def precision_crop(img, frame_w, frame_h, rotation, scale, off_x, off_y):
+    if img is None:
+        return None
+
+    if rotation != 0:
+        img = img.rotate(rotation, expand=True)
+
+    img_w, img_h = img.size
+    target_ratio = frame_w / frame_h
+    img_ratio = img_w / img_h
+
+    if img_ratio > target_ratio:
+        base_w, base_h = int(img_h * target_ratio), img_h
+    else:
+        base_w, base_h = img_w, int(img_w / target_ratio)
+
+    crop_w, crop_h = int(base_w / scale), int(base_h / scale)
+
+    max_dx = max(0, (img_w - crop_w) / 2)
+    max_dy = max(0, (img_h - crop_h) / 2)
+
+    left = (img_w / 2) - (crop_w / 2) + (off_x * max_dx)
+    top = (img_h / 2) - (crop_h / 2) + (off_y * max_dy)
+
+    return img.crop((int(left), int(top), int(left + crop_w), int(top + crop_h)))
+
+
+st.title("프레임 노트")
+st.markdown("기록의 온도를 높여주는 나만의 사진 편집기")
+
+st.sidebar.header("인쇄 설정")
+selected_model = st.sidebar.selectbox("어떤 라벨지를 사용하시나요", list(LABEL_SPECS.keys()))
+spec = LABEL_SPECS[selected_model]
+st.sidebar.divider()
+st.sidebar.caption(f"한 장에 최대 {spec['MAX']}개의 사진을 담을 수 있어요.")
+
+uploaded_files = st.file_uploader(
+    f"이곳에 사진을 올려주세요 (최대 {spec['MAX']}장)",
+    type=['png', 'jpg', 'jpeg', 'heic', 'heif'],
+    accept_multiple_files=True
+)
+
+if uploaded_files:
+    st.session_state.persistent_files = uploaded_files
+
+if st.session_state.persistent_files:
+    current_files = st.session_state.persistent_files[:spec['MAX']]
+
+    for idx, file in enumerate(current_files):
+        if idx not in st.session_state.settings:
+            _, ui_img = process_image_assets(file.getvalue())
+            auto_rot = 0
+            if ui_img:
+                auto_rot = get_auto_rotation(ui_img.width, ui_img.height, spec['WIDTH'], spec['HEIGHT'])
+            st.session_state.settings[idx] = {"rot": auto_rot, "sc": 1.0, "x": 0.0, "y": 0.0}
+
+    if st.session_state.current_view == 'overview':
+        st.subheader("이런 모습으로 인쇄될 예정이에요")
+
+        for i in range(0, len(current_files), spec['COLS']):
+            cols = st.columns(spec['COLS'])
+            for j in range(spec['COLS']):
+                idx = i + j
+                if idx < len(current_files):
+                    file = current_files[idx]
+                    cfg = st.session_state.settings[idx]
+                    _, ui_img = process_image_assets(file.getvalue())
+                    thumb = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
+                                           cfg["rot"], cfg["sc"], cfg["x"], cfg["y"])
+
+                    with cols[j]:
+                        if thumb:
+                            st.image(thumb, width='content')
+                            st.caption(f"사진 {idx + 1}")
+                            if st.button("수정하기", key=f"edit_btn_{idx}"):
+                                st.session_state.edit_target_idx = idx
+                                st.session_state.current_view = 'edit'
+                                st.rerun()
+                    st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
+
+        st.divider()
+        if st.button("인쇄용 PDF 파일 생성", width='content'):
+            with st.spinner("예쁘게 구워내는 중이에요..."):
+                pdf_buffer = io.BytesIO()
+                p = canvas.Canvas(pdf_buffer, pagesize=A4)
+                h_a4 = A4[1]
+
+                for idx, file in enumerate(current_files):
+                    cfg = st.session_state.settings[idx]
+                    original_img, _ = process_image_assets(file.getvalue())
+                    final = precision_crop(original_img, spec['WIDTH'], spec['HEIGHT'],
+                                           cfg["rot"], cfg["sc"], cfg["x"], cfg["y"])
+
+                    if final:
+                        r, c = divmod(idx, spec['COLS'])
+                        x_pos = (spec['MARGIN_LEFT'] + (c * (spec['WIDTH'] + spec['GAP_H']))) * mm
+                        y_pos = h_a4 - ((spec['MARGIN_TOP'] + (r * (spec['HEIGHT'] + spec['GAP_V'])) + spec['HEIGHT']) * mm)
+
+                        img_data = io.BytesIO()
+                        final.save(img_io := io.BytesIO(), format='PNG', optimize=True)
+                        img_io.seek(0)
+                        from reportlab.lib.utils import ImageReader
+
+                        p.drawImage(ImageReader(img_io), x_pos, y_pos, width=spec['WIDTH'] * mm, height=spec['HEIGHT'] * mm)
+
+                p.showPage()
+                p.save()
+
+                st.success("완성되었어요. 이제 인쇄할 수 있어요.")
+                st.download_button(
+                    label="다운로드",
+                    data=pdf_buffer.getvalue(),
+                    file_name=f"FrameNotes_{selected_model.split()[0]}.pdf",
+                    mime="application/pdf"
+                )
+
+    elif st.session_state.current_view == 'edit':
+        curr_idx = st.session_state.edit_target_idx
+
+        st.subheader(f"사진 {curr_idx + 1} 다듬기")
+
+        col_ctrl, col_spacer, col_preview = st.columns([1, 0.1, 0.8])
+
+        s = st.session_state.settings[curr_idx]
+        _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
+
+        with col_ctrl:
+            if st.button("90도 회전", key=f"r_btn_{curr_idx}"):
+                s["rot"] = (s["rot"] + 90) % 360
+                st.rerun()
+
+            s["sc"] = st.slider("사진 확대하기", 1.0, 5.0, float(s["sc"]), 0.1, key=f"sc_f_{curr_idx}")
+            s["x"] = st.slider("좌우로 위치 이동", -1.0, 1.0, float(s["x"]), 0.01, key=f"x_f_{curr_idx}")
+            s["y"] = st.slider("위아래로 위치 이동", -1.0, 1.0, float(s["y"]), 0.01, key=f"y_f_{curr_idx}")
+
+            st.markdown('<div style="margin-top:20px;"></div>', unsafe_allow_html=True)
+            if st.button("확인하고 전체 화면으로 돌아가기"):
+                st.session_state.current_view = 'overview'
+                st.rerun()
+
+        with col_preview:
+            final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
+                                        s["rot"], s["sc"], s["x"], s["y"])
+            if final_view:
+                st.image(final_view, width=300)
+
+else:
+    st.info("시작하려면 사진을 먼저 올려주세요. 다이어리를 위한 포토 스티커를 만들어보아요.")
