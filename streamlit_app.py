@@ -192,11 +192,7 @@ if st.session_state.persistent_files:
         s = st.session_state.settings[curr_idx]
         _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
 
-        final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
-                                    s["rot"], s["sc"], s["x"], s["y"])
-        
-        if final_view:
-            st.image(final_view, use_container_width=True)
+        preview_placeholder = st.empty()
             
         if st.button("↻ 90도 회전", use_container_width=True):
             s["rot"] = (s["rot"] + 90) % 360
@@ -207,16 +203,14 @@ if st.session_state.persistent_files:
 
         st.markdown('<div style="margin-top:10px;"></div>', unsafe_allow_html=True)
 
-        with st.form(key=f"edit_form_{curr_idx}"):
-            new_sc = st.slider("확대", 1.0, 5.0, float(s["sc"]), 0.1)
-            new_x = st.slider("좌우 이동", -1.0, 1.0, float(s["x"]), 0.01)
-            new_y = st.slider("상하 이동", -1.0, 1.0, float(s["y"]), 0.01)
-            
-            if st.form_submit_button("크기 및 위치 적용하기", use_container_width=True):
-                s["sc"] = new_sc
-                s["x"] = new_x
-                s["y"] = new_y
-                st.rerun()
+        s["sc"] = st.slider("확대", 1.0, 5.0, float(s["sc"]), 0.1)
+        s["x"] = st.slider("좌우 이동", -1.0, 1.0, float(s["x"]), 0.01)
+        s["y"] = st.slider("상하 이동", -1.0, 1.0, float(s["y"]), 0.01)
+        
+        final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
+                                    s["rot"], s["sc"], s["x"], s["y"])
+        if final_view:
+            preview_placeholder.image(final_view, use_container_width=True)
                 
         if st.button("완료하고 돌아가기", use_container_width=True):
             st.session_state.current_view = 'overview'
