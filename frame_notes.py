@@ -7,7 +7,6 @@ import io
 
 try:
     from pillow_heif import register_heif_opener
-
     register_heif_opener()
 except ImportError:
     pass
@@ -36,12 +35,17 @@ if 'edit_target_idx' not in st.session_state:
 
 
 @st.cache_data
-def load_and_fix_image(file_data):
+def process_image_assets(file_bytes):
     try:
-        img = Image.open(file_data)
-        return ImageOps.exif_transpose(img)
+        img = Image.open(io.BytesIO(file_bytes))
+        original = ImageOps.exif_transpose(img)
+        
+        ui_preview = original.copy()
+        ui_preview.thumbnail((600, 600), Image.Resampling.LANCZOS)
+        
+        return original, ui_preview
     except Exception:
-        return None
+        return None, None
 
 
 def get_auto_rotation(img_w, img_h, frame_w, frame_h):
@@ -102,10 +106,10 @@ if st.session_state.persistent_files:
 
     for idx, file in enumerate(current_files):
         if idx not in st.session_state.settings:
-            src_img = load_and_fix_image(file)
+            _, ui_img = process_image_assets(file.getvalue())
             auto_rot = 0
-            if src_img:
-                auto_rot = get_auto_rotation(src_img.width, src_img.height, spec['WIDTH'], spec['HEIGHT'])
+            if ui_img:
+                auto_rot = get_auto_rotation(ui_img.width, ui_img.height, spec['WIDTH'], spec['HEIGHT'])
             st.session_state.settings[idx] = {"rot": auto_rot, "sc": 1.0, "x": 0.0, "y": 0.0}
 
     if st.session_state.current_view == 'overview':
@@ -118,8 +122,8 @@ if st.session_state.persistent_files:
                 if idx < len(current_files):
                     file = current_files[idx]
                     cfg = st.session_state.settings[idx]
-                    src = load_and_fix_image(file)
-                    thumb = precision_crop(src, spec['WIDTH'], spec['HEIGHT'],
+                    _, ui_img = process_image_assets(file.getvalue())
+                    thumb = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
                                            cfg["rot"], cfg["sc"], cfg["x"], cfg["y"])
 
                     with cols[j]:
@@ -130,7 +134,7 @@ if st.session_state.persistent_files:
                                 st.session_state.edit_target_idx = idx
                                 st.session_state.current_view = 'edit'
                                 st.rerun()
-                        st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
+                    st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
 
         st.divider()
         if st.button("인쇄용 PDF 파일 생성", width='content'):
@@ -141,23 +145,21 @@ if st.session_state.persistent_files:
 
                 for idx, file in enumerate(current_files):
                     cfg = st.session_state.settings[idx]
-                    src = load_and_fix_image(file)
-                    final = precision_crop(src, spec['WIDTH'], spec['HEIGHT'],
+                    original_img, _ = process_image_assets(file.getvalue())
+                    final = precision_crop(original_img, spec['WIDTH'], spec['HEIGHT'],
                                            cfg["rot"], cfg["sc"], cfg["x"], cfg["y"])
 
                     if final:
                         r, c = divmod(idx, spec['COLS'])
                         x_pos = (spec['MARGIN_LEFT'] + (c * (spec['WIDTH'] + spec['GAP_H']))) * mm
-                        y_pos = h_a4 - (
-                                    (spec['MARGIN_TOP'] + (r * (spec['HEIGHT'] + spec['GAP_V'])) + spec['HEIGHT']) * mm)
+                        y_pos = h_a4 - ((spec['MARGIN_TOP'] + (r * (spec['HEIGHT'] + spec['GAP_V'])) + spec['HEIGHT']) * mm)
 
                         img_data = io.BytesIO()
                         final.save(img_io := io.BytesIO(), format='PNG', optimize=True)
                         img_io.seek(0)
                         from reportlab.lib.utils import ImageReader
 
-                        p.drawImage(ImageReader(img_io), x_pos, y_pos, width=spec['WIDTH'] * mm,
-                                    height=spec['HEIGHT'] * mm)
+                        p.drawImage(ImageReader(img_io), x_pos, y_pos, width=spec['WIDTH'] * mm, height=spec['HEIGHT'] * mm)
 
                 p.showPage()
                 p.save()
@@ -178,7 +180,7 @@ if st.session_state.persistent_files:
         col_ctrl, col_spacer, col_preview = st.columns([1, 0.1, 0.8])
 
         s = st.session_state.settings[curr_idx]
-        source_img = load_and_fix_image(current_files[curr_idx])
+        _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
 
         with col_ctrl:
             if st.button("90도 회전", key=f"r_btn_{curr_idx}"):
@@ -195,7 +197,7 @@ if st.session_state.persistent_files:
                 st.rerun()
 
         with col_preview:
-            final_view = precision_crop(source_img, spec['WIDTH'], spec['HEIGHT'],
+            final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
                                         s["rot"], s["sc"], s["x"], s["y"])
             if final_view:
                 st.image(final_view, width=300)
