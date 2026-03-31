@@ -40,7 +40,6 @@ def process_image_assets(file_bytes):
         img = Image.open(io.BytesIO(file_bytes))
         original = ImageOps.exif_transpose(img)
         
-        # 모바일 메모리 터짐 방지를 위한 극한의 해상도 다이어트
         ui_preview = original.copy()
         ui_preview.thumbnail((250, 250), Image.Resampling.LANCZOS)
         
@@ -155,11 +154,17 @@ if st.session_state.persistent_files:
                         x_pos = (spec['MARGIN_LEFT'] + (c * (spec['WIDTH'] + spec['GAP_H']))) * mm
                         y_pos = h_a4 - ((spec['MARGIN_TOP'] + (r * (spec['HEIGHT'] + spec['GAP_V'])) + spec['HEIGHT']) * mm)
 
-                        img_data = io.BytesIO()
-                        final.save(img_io := io.BytesIO(), format='PNG', optimize=True)
+                        # 여기서부터 피디에프 생성 속도 개선 로직
+                        final.thumbnail((800, 800), Image.Resampling.LANCZOS)
+                        
+                        if final.mode in ("RGBA", "P"):
+                            final = final.convert("RGB")
+                            
+                        img_io = io.BytesIO()
+                        final.save(img_io, format='JPEG', quality=90)
                         img_io.seek(0)
+                        
                         from reportlab.lib.utils import ImageReader
-
                         p.drawImage(ImageReader(img_io), x_pos, y_pos, width=spec['WIDTH'] * mm, height=spec['HEIGHT'] * mm)
 
                 p.showPage()
@@ -184,7 +189,6 @@ if st.session_state.persistent_files:
         _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
 
         with col_ctrl:
-            # 폼을 사용해서 버튼을 누를 때만 서버가 반응하도록 묶음 처리
             with st.form(key=f"edit_form_{curr_idx}"):
                 new_rot = st.slider("회전 방향 (90도씩)", 0, 270, int(s["rot"]), 90)
                 new_sc = st.slider("사진 확대하기", 1.0, 5.0, float(s["sc"]), 0.1)
@@ -198,3 +202,18 @@ if st.session_state.persistent_files:
                     s["sc"] = new_sc
                     s["x"] = new_x
                     s["y"] = new_y
+                    st.rerun()
+
+            st.markdown('<div style="margin-top:20px;"></div>', unsafe_allow_html=True)
+            if st.button("전체 화면으로 돌아가기"):
+                st.session_state.current_view = 'overview'
+                st.rerun()
+
+        with col_preview:
+            final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
+                                        s["rot"], s["sc"], s["x"], s["y"])
+            if final_view:
+                st.image(final_view, width=300)
+
+else:
+    st.info("시작하려면 사진을 먼저 올려주세요. 다이어리를 위한 포토 스티커를 만들어보아요.")
