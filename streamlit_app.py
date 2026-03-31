@@ -137,12 +137,12 @@ if st.session_state.persistent_files:
                             if st.button("수정", key=f"edit_btn_{idx}"):
                                 st.session_state.edit_target_idx = idx
                                 st.session_state.current_view = 'edit'
-                                st.experimental_rerun()
+                                st.rerun()
                     st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
 
         st.divider()
         if st.button("인쇄용 피디에프 파일 생성", use_container_width=True):
-            with st.spinner("예쁘게 구워내는 중이에요."):
+            with st.spinner("예쁘게 구워내는 중이에요..."):
                 pdf_buffer = io.BytesIO()
                 p = canvas.Canvas(pdf_buffer, pagesize=A4)
                 h_a4 = A4[1]
@@ -155,48 +155,4 @@ if st.session_state.persistent_files:
                         r, c = divmod(idx, spec['COLS'])
                         x_pos = (spec['MARGIN_LEFT'] + (c * (spec['WIDTH'] + spec['GAP_H']))) * mm
                         y_pos = h_a4 - ((spec['MARGIN_TOP'] + (r * (spec['HEIGHT'] + spec['GAP_V'])) + spec['HEIGHT']) * mm)
-                        final.thumbnail((800, 800), Image.Resampling.LANCZOS)
-                        if final.mode in ("RGBA", "P"):
-                            final = final.convert("RGB")
-                        img_io = io.BytesIO()
-                        final.save(img_io, format='JPEG', quality=90)
-                        img_io.seek(0)
-                        from reportlab.lib.utils import ImageReader
-                        p.drawImage(ImageReader(img_io), x_pos, y_pos, width=spec['WIDTH'] * mm, height=spec['HEIGHT'] * mm)
-                p.showPage()
-                p.save()
-                st.success("완성되었어요. 이제 다운로드할 수 있어요.")
-                st.download_button(
-                    label="완성된 파일 다운로드",
-                    data=pdf_buffer.getvalue(),
-                    file_name="FrameNotes_Result.pdf",
-                    mime="application/pdf"
-                )
-
-    elif st.session_state.current_view == 'edit':
-        curr_idx = st.session_state.edit_target_idx
-        st.subheader(f"사진 {curr_idx + 1} 다듬기")
-        col_ctrl, col_spacer, col_preview = st.columns([1, 0.1, 0.8])
-        s = st.session_state.settings[curr_idx]
-        _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
-
-        with col_ctrl:
-            with st.form(key=f"edit_form_{curr_idx}"):
-                new_rot = st.slider("회전 방향 (90도씩)", 0, 270, int(s["rot"]), 90)
-                new_sc = st.slider("확대", 1.0, 5.0, float(s["sc"]), 0.1)
-                new_x = st.slider("좌우 이동", -1.0, 1.0, float(s["x"]), 0.01)
-                new_y = st.slider("상하 이동", -1.0, 1.0, float(s["y"]), 0.01)
-                if st.form_submit_button("적용하기"):
-                    s["rot"], s["sc"], s["x"], s["y"] = new_rot, new_sc, new_x, new_y
-                    st.experimental_rerun()
-            if st.button("돌아가기"):
-                st.session_state.current_view = 'overview'
-                st.experimental_rerun()
-
-        with col_preview:
-            final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
-                                        s["rot"], s["sc"], s["x"], s["y"])
-            if final_view:
-                st.image(final_view, width=300)
-else:
-    st.info("시작하려면 사진을 먼저 올려주세요. 다이어리를 위한 포토 스티커를 만들어보아요.")
+                        final.thumbnail((
