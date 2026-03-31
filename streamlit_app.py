@@ -24,6 +24,19 @@ LABEL_SPECS = {
 
 st.set_page_config(page_title="프레임 노트", layout="wide")
 
+st.markdown("""
+<style>
+    /* 버튼 둥글게 만들기 */
+    .stButton>button {
+        border-radius: 20px;
+        border: 1px solid #E0D8C0;
+    }
+    /* 불필요한 기본 메뉴 숨기기 */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
 if 'persistent_files' not in st.session_state:
     st.session_state.persistent_files = []
 if 'settings' not in st.session_state:
