@@ -11,7 +11,6 @@ try:
 except ImportError:
     pass
 
-# 라벨 규격 설정
 LABEL_SPECS = {
     "명함 (4X5cm / 24칸)": {
         "WIDTH": 50.0, "HEIGHT": 40.0, "MARGIN_LEFT": 5.0, "MARGIN_TOP": 21.0,
@@ -25,12 +24,22 @@ LABEL_SPECS = {
 
 st.set_page_config(page_title="프레임 노트", layout="wide")
 
-# 간단한 UI 디자인 적용
 st.markdown("""
 <style>
     .stButton>button {
-        border-radius: 12px;
-        border: 1px solid #E0D8C0;
+        border-radius: 4px;
+        border: 1px solid #D1C7B7;
+        background-color: transparent;
+        color: #3E3A39;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        border-color: #8B7355;
+        color: #8B7355;
+    }
+    img {
+        border-radius: 2px;
+        box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.08);
     }
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -86,13 +95,12 @@ def precision_crop(img, frame_w, frame_h, rotation, scale, off_x, off_y):
 st.title("프레임 노트")
 st.markdown("기록의 온도를 높여주는 나만의 사진 편집기")
 
-# 라벨 선택 필터를 메인 화면으로 이동
 selected_model = st.selectbox("어떤 라벨지를 사용하시나요?", list(LABEL_SPECS.keys()))
 spec = LABEL_SPECS[selected_model]
 st.caption(f"이 라벨지는 한 장에 최대 {spec['MAX']}개의 사진을 담을 수 있어요.")
 
 uploaded_files = st.file_uploader(
-    f"이곳에 사진을 올려주세요",
+    "이곳에 사진을 올려주세요",
     type=['png', 'jpg', 'jpeg', 'heic', 'heif'],
     accept_multiple_files=True
 )
@@ -129,7 +137,7 @@ if st.session_state.persistent_files:
                             if st.button("수정", key=f"edit_btn_{idx}"):
                                 st.session_state.edit_target_idx = idx
                                 st.session_state.current_view = 'edit'
-                                st.rerun()
+                                st.experimental_rerun()
                     st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
 
         st.divider()
@@ -161,7 +169,7 @@ if st.session_state.persistent_files:
                 st.download_button(
                     label="완성된 파일 다운로드",
                     data=pdf_buffer.getvalue(),
-                    file_name=f"FrameNotes_Result.pdf",
+                    file_name="FrameNotes_Result.pdf",
                     mime="application/pdf"
                 )
 
@@ -180,10 +188,10 @@ if st.session_state.persistent_files:
                 new_y = st.slider("상하 이동", -1.0, 1.0, float(s["y"]), 0.01)
                 if st.form_submit_button("적용하기"):
                     s["rot"], s["sc"], s["x"], s["y"] = new_rot, new_sc, new_x, new_y
-                    st.rerun()
+                    st.experimental_rerun()
             if st.button("돌아가기"):
                 st.session_state.current_view = 'overview'
-                st.rerun()
+                st.experimental_rerun()
 
         with col_preview:
             final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
