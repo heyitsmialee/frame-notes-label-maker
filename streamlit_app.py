@@ -64,7 +64,8 @@ def process_image_assets(file_bytes):
         original.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
         
         ui_preview = original.copy()
-        ui_preview.thumbnail((250, 250), Image.Resampling.LANCZOS)
+        # 해상도를 250에서 375로 50% 상향 조정
+        ui_preview.thumbnail((375, 375), Image.Resampling.LANCZOS)
         
         return original, ui_preview
     except Exception:
