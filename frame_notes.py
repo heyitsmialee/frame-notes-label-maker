@@ -40,8 +40,9 @@ def process_image_assets(file_bytes):
         img = Image.open(io.BytesIO(file_bytes))
         original = ImageOps.exif_transpose(img)
         
+        # 모바일 메모리 터짐 방지를 위한 극한의 해상도 다이어트
         ui_preview = original.copy()
-        ui_preview.thumbnail((600, 600), Image.Resampling.LANCZOS)
+        ui_preview.thumbnail((250, 250), Image.Resampling.LANCZOS)
         
         return original, ui_preview
     except Exception:
@@ -128,7 +129,7 @@ if st.session_state.persistent_files:
 
                     with cols[j]:
                         if thumb:
-                            st.image(thumb, width='content')
+                            st.image(thumb, use_container_width=True)
                             st.caption(f"사진 {idx + 1}")
                             if st.button("수정하기", key=f"edit_btn_{idx}"):
                                 st.session_state.edit_target_idx = idx
@@ -137,8 +138,8 @@ if st.session_state.persistent_files:
                     st.markdown('<div style="margin-bottom:12px;"></div>', unsafe_allow_html=True)
 
         st.divider()
-        if st.button("인쇄용 PDF 파일 생성", width='content'):
-            with st.spinner("예쁘게 구워내는 중이에요..."):
+        if st.button("인쇄용 피디에프 파일 생성", use_container_width=True):
+            with st.spinner("예쁘게 구워내는 중이에요."):
                 pdf_buffer = io.BytesIO()
                 p = canvas.Canvas(pdf_buffer, pagesize=A4)
                 h_a4 = A4[1]
@@ -164,9 +165,9 @@ if st.session_state.persistent_files:
                 p.showPage()
                 p.save()
 
-                st.success("완성되었어요. 이제 인쇄할 수 있어요.")
+                st.success("완성되었어요. 이제 다운로드할 수 있어요.")
                 st.download_button(
-                    label="다운로드",
+                    label="완성된 파일 다운로드",
                     data=pdf_buffer.getvalue(),
                     file_name=f"FrameNotes_{selected_model.split()[0]}.pdf",
                     mime="application/pdf"
@@ -183,24 +184,17 @@ if st.session_state.persistent_files:
         _, ui_img = process_image_assets(current_files[curr_idx].getvalue())
 
         with col_ctrl:
-            if st.button("90도 회전", key=f"r_btn_{curr_idx}"):
-                s["rot"] = (s["rot"] + 90) % 360
-                st.rerun()
-
-            s["sc"] = st.slider("사진 확대하기", 1.0, 5.0, float(s["sc"]), 0.1, key=f"sc_f_{curr_idx}")
-            s["x"] = st.slider("좌우로 위치 이동", -1.0, 1.0, float(s["x"]), 0.01, key=f"x_f_{curr_idx}")
-            s["y"] = st.slider("위아래로 위치 이동", -1.0, 1.0, float(s["y"]), 0.01, key=f"y_f_{curr_idx}")
-
-            st.markdown('<div style="margin-top:20px;"></div>', unsafe_allow_html=True)
-            if st.button("확인하고 전체 화면으로 돌아가기"):
-                st.session_state.current_view = 'overview'
-                st.rerun()
-
-        with col_preview:
-            final_view = precision_crop(ui_img, spec['WIDTH'], spec['HEIGHT'],
-                                        s["rot"], s["sc"], s["x"], s["y"])
-            if final_view:
-                st.image(final_view, width=300)
-
-else:
-    st.info("시작하려면 사진을 먼저 올려주세요. 다이어리를 위한 포토 스티커를 만들어보아요.")
+            # 폼을 사용해서 버튼을 누를 때만 서버가 반응하도록 묶음 처리
+            with st.form(key=f"edit_form_{curr_idx}"):
+                new_rot = st.slider("회전 방향 (90도씩)", 0, 270, int(s["rot"]), 90)
+                new_sc = st.slider("사진 확대하기", 1.0, 5.0, float(s["sc"]), 0.1)
+                new_x = st.slider("좌우로 위치 이동", -1.0, 1.0, float(s["x"]), 0.01)
+                new_y = st.slider("위아래로 위치 이동", -1.0, 1.0, float(s["y"]), 0.01)
+                
+                submit_btn = st.form_submit_button("이대로 적용하기")
+                
+                if submit_btn:
+                    s["rot"] = new_rot
+                    s["sc"] = new_sc
+                    s["x"] = new_x
+                    s["y"] = new_y
